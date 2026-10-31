@@ -1,7 +1,9 @@
+import asyncio
 from contextlib import asynccontextmanager
 import datetime
 import os
 from pathlib import Path
+import threading
 import uuid
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
@@ -16,17 +18,20 @@ load_dotenv()
 
 from answer import ask
 from db_setup import init_db
-from ingest import (
+from knowledge_ingest import (
     ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE,
-    ingest_document,
-    ingest_github_repo,
+    ingest_document_file,
+    ingest_github_repository,
     delete_chunks_by_prefix,
     DB_URI,
 )
 
-# In-memory background task registry
+# In-memory background task registry (Single-worker uvicorn required for consistent state)
 task_registry: dict[str, dict] = {}
+
+# Enforce only one indexing job at a time
+indexing_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -41,8 +46,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Project Brain AI", lifespan=lifespan)
 
-# CORS: Allow only frontend origins from env variable, defaulting to local dev URL
-frontend_origin_env = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173,http://localhost:3000")
+# CORS: allow origins from FRONTEND_ORIGIN (comma-separated, parse with split(",")), default http://localhost:5173
+frontend_origin_env = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 allowed_origins = [o.strip() for o in frontend_origin_env.split(",") if o.strip()]
 
 app.add_middleware(
@@ -62,8 +67,8 @@ class RepoRequest(BaseModel):
     repo_url: str
 
 
-class DeleteRepoRequest(BaseModel):
-    repo_prefix: str
+class DeletePrefixRequest(BaseModel):
+    prefix: str
 
 
 @app.get("/health")
@@ -80,7 +85,7 @@ def ask_endpoint(body: Question):
     try:
         return ask(q)
     except Exception as e:
-        print("ERROR:", e)  # log it, but never crash the demo
+        print("ERROR:", e)  # log error, never crash demo
         return {
             "found": False,
             "answer": "Something went wrong. Please try again.",
@@ -89,13 +94,21 @@ def ask_endpoint(body: Question):
         }
 
 
-def _run_document_task(task_id: str, filename: str, file_bytes: bytes):
+def _run_document_indexing(task_id: str, filename: str, file_bytes: bytes):
     def update_progress(msg: str, cur: int, total: int):
         if task_id in task_registry:
             task_registry[task_id]["progress"] = msg
 
+    acquired = indexing_lock.acquire(blocking=False)
+    if not acquired:
+        task_registry[task_id]["status"] = "failed"
+        task_registry[task_id]["error"] = "Another indexing job is currently running. Please wait for it to complete."
+        task_registry[task_id]["progress"] = "Failed: Concurrency limit (one indexing job at a time)."
+        task_registry[task_id]["completed_at"] = str(datetime.datetime.now())
+        return
+
     try:
-        result = ingest_document(filename, file_bytes, progress_callback=update_progress)
+        result = ingest_document_file(filename, file_bytes, progress_callback=update_progress)
         if task_id in task_registry:
             task_registry[task_id]["status"] = "completed"
             task_registry[task_id]["progress"] = f"Successfully indexed {result['chunks_ingested']} chunk(s) from {filename}."
@@ -107,18 +120,32 @@ def _run_document_task(task_id: str, filename: str, file_bytes: bytes):
             task_registry[task_id]["error"] = str(e)
             task_registry[task_id]["progress"] = f"Failed: {e}"
             task_registry[task_id]["completed_at"] = str(datetime.datetime.now())
+    finally:
+        indexing_lock.release()
 
 
-def _run_repo_task(task_id: str, repo_url: str):
+def _run_repo_indexing(task_id: str, repo_url: str):
     def update_progress(msg: str, cur: int, total: int):
         if task_id in task_registry:
             task_registry[task_id]["progress"] = msg
 
+    acquired = indexing_lock.acquire(blocking=False)
+    if not acquired:
+        task_registry[task_id]["status"] = "failed"
+        task_registry[task_id]["error"] = "Another indexing job is currently running. Please wait for it to complete."
+        task_registry[task_id]["progress"] = "Failed: Concurrency limit (one indexing job at a time)."
+        task_registry[task_id]["completed_at"] = str(datetime.datetime.now())
+        return
+
     try:
-        result = ingest_github_repo(repo_url, progress_callback=update_progress)
+        result = ingest_github_repository(repo_url, progress_callback=update_progress)
         if task_id in task_registry:
-            task_registry[task_id]["status"] = "completed"
-            task_registry[task_id]["progress"] = f"Indexed {result['chunks_ingested']} items from {result['repository']}."
+            status_val = result.get("status", "completed")
+            task_registry[task_id]["status"] = status_val
+            progress_msg = f"Indexed {result['chunks_ingested']} items from {result['repository']}."
+            if result.get("partial_note"):
+                progress_msg += f" Note: {result['partial_note']}"
+            task_registry[task_id]["progress"] = progress_msg
             task_registry[task_id]["chunks_ingested"] = result["chunks_ingested"]
             task_registry[task_id]["completed_at"] = str(datetime.datetime.now())
     except Exception as e:
@@ -127,6 +154,8 @@ def _run_repo_task(task_id: str, repo_url: str):
             task_registry[task_id]["error"] = str(e)
             task_registry[task_id]["progress"] = f"Failed: {e}"
             task_registry[task_id]["completed_at"] = str(datetime.datetime.now())
+    finally:
+        indexing_lock.release()
 
 
 @app.post("/api/knowledge/upload")
@@ -134,6 +163,9 @@ async def upload_document_endpoint(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename cannot be empty.")
+
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
@@ -143,6 +175,9 @@ async def upload_document_endpoint(
         )
 
     content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty (0 bytes).")
+
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
@@ -161,8 +196,8 @@ async def upload_document_endpoint(
         "started_at": str(datetime.datetime.now()),
     }
 
-    background_tasks.add_task(_run_document_task, task_id, file.filename, content)
-    return {"task_id": task_id, "status": "processing", "message": f"Upload received for {file.filename}."}
+    background_tasks.add_task(_run_document_indexing, task_id, file.filename, content)
+    return {"task_id": task_id, "status": "processing", "message": f"Upload queued for {file.filename}."}
 
 
 @app.post("/api/knowledge/repository")
@@ -177,13 +212,13 @@ def connect_repository_endpoint(body: RepoRequest, background_tasks: BackgroundT
         "type": "repository",
         "target": url,
         "status": "processing",
-        "progress": "Starting repository ingestion...",
+        "progress": "Connecting to GitHub repository...",
         "chunks_ingested": 0,
         "error": None,
         "started_at": str(datetime.datetime.now()),
     }
 
-    background_tasks.add_task(_run_repo_task, task_id, url)
+    background_tasks.add_task(_run_repo_indexing, task_id, url)
     return {"task_id": task_id, "status": "processing", "message": "Repository ingestion started."}
 
 
@@ -195,20 +230,23 @@ def get_task_status(task_id: str):
     return task
 
 
-@app.delete("/api/knowledge/repository")
-def delete_repository_endpoint(body: DeleteRepoRequest):
-    prefix = body.repo_prefix.strip()
+@app.delete("/api/knowledge/reset")
+def reset_chunks_endpoint(body: DeletePrefixRequest):
+    prefix = body.prefix.strip()
     if not prefix:
-        raise HTTPException(status_code=400, detail="Repository prefix or identifier is required.")
+        raise HTTPException(status_code=400, detail="Prefix is required (e.g. 'gh:owner:repo:' or 'upload:filename#').")
     deleted = delete_chunks_by_prefix(prefix)
     return {"status": "ok", "deleted_chunks": deleted}
 
 
 @app.get("/api/knowledge/sources")
 def get_sources_endpoint():
-    """Return live indexed knowledge sources grouped by documents and repositories."""
-    docs = {}
-    repos = {}
+    """
+    List indexed documents and repositories using the delimiter prefixes:
+    upload:<filename>#<n> and gh:<owner>:<repo>:...
+    """
+    docs: dict[str, dict] = {}
+    repos: dict[str, dict] = {}
 
     try:
         with psycopg.connect(DB_URI) as conn:
@@ -226,11 +264,62 @@ def get_sources_endpoint():
                     cid, ctype, source_url, author, date_val, files = r
                     date_str = str(date_val) if date_val else ""
 
-                    if ctype == "document":
+                    if cid.startswith("upload:"):
+                        # upload:<filename>#<n>
+                        doc_key = cid.split("#")[0].replace("upload:", "")
+                        if doc_key not in docs:
+                            docs[doc_key] = {
+                                "id": f"upload:{doc_key}#",
+                                "name": doc_key,
+                                "source": "Uploaded Document",
+                                "chunks": 0,
+                                "updated": date_str,
+                                "author": author or "User",
+                                "score": 95,
+                            }
+                        docs[doc_key]["chunks"] += 1
+
+                    elif cid.startswith("gh:"):
+                        # gh:<owner>:<repo>:<type>:...
+                        parts = cid.split(":")
+                        if len(parts) >= 4:
+                            owner, repo_name = parts[1], parts[2]
+                            repo_key = f"{owner}/{repo_name}"
+                            repo_prefix = f"gh:{owner}:{repo_name}:"
+                        else:
+                            repo_key = "Imported Repository"
+                            repo_prefix = "gh:"
+
+                        if repo_key not in repos:
+                            repos[repo_key] = {
+                                "id": repo_prefix,
+                                "name": repo_key,
+                                "subtitle": "Public GitHub Repository",
+                                "status": "Synced",
+                                "lastSynced": date_str or "Just now",
+                                "commits": 0,
+                                "prs": 0,
+                                "issues": 0,
+                                "docs": 0,
+                                "iconColor": "teal",
+                            }
+
+                        item_type = parts[3] if len(parts) >= 4 else ctype
+                        if item_type == "commit":
+                            repos[repo_key]["commits"] += 1
+                        elif item_type == "pr":
+                            repos[repo_key]["prs"] += 1
+                        elif item_type == "issue":
+                            repos[repo_key]["issues"] += 1
+                        elif item_type == "doc":
+                            repos[repo_key]["docs"] += 1
+
+                    elif ctype == "document":
+                        # Legacy document fallback
                         doc_name = (files and files[0]) or source_url or cid.split("#")[0]
                         if doc_name not in docs:
                             docs[doc_name] = {
-                                "id": doc_name,
+                                "id": f"upload:{doc_name}#",
                                 "name": doc_name,
                                 "source": "Uploaded Document",
                                 "chunks": 0,
@@ -239,34 +328,6 @@ def get_sources_endpoint():
                                 "score": 95,
                             }
                         docs[doc_name]["chunks"] += 1
-
-                    elif ctype in ("commit", "issue", "pr"):
-                        # Extract repo name from id e.g. gh_owner_repo_commit_sha
-                        parts = cid.split("_")
-                        if len(parts) >= 4 and parts[0] == "gh":
-                            owner, repo_name = parts[1], parts[2]
-                            full_repo = f"{owner}/{repo_name}"
-                        else:
-                            full_repo = "Imported Repository"
-
-                        if full_repo not in repos:
-                            repos[full_repo] = {
-                                "id": f"gh_{full_repo.replace('/', '_')}",
-                                "name": full_repo,
-                                "subtitle": "Public GitHub Repository",
-                                "status": "Synced",
-                                "lastSynced": date_str or "Just now",
-                                "commits": 0,
-                                "prs": 0,
-                                "issues": 0,
-                                "iconColor": "teal",
-                            }
-                        if ctype == "commit":
-                            repos[full_repo]["commits"] += 1
-                        elif ctype == "pr":
-                            repos[full_repo]["prs"] += 1
-                        elif ctype == "issue":
-                            repos[full_repo]["issues"] += 1
     except Exception as e:
         print("Error fetching sources:", e)
 

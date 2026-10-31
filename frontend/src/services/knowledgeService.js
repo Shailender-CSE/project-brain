@@ -14,7 +14,7 @@ export async function pollTaskUntilDone(taskId, onProgress, intervalMs = 1000) {
     if (onProgress && status.progress) {
       onProgress(status.progress);
     }
-    if (status.status === 'completed') {
+    if (status.status === 'completed' || status.status === 'completed (partial)') {
       return status;
     }
     if (status.status === 'failed') {
@@ -45,10 +45,10 @@ export async function connectRepository(repoUrl, onProgress) {
   return await pollTaskUntilDone(response.task_id, onProgress);
 }
 
-export async function deleteRepository(repoPrefix) {
-  return await apiRequest('/api/knowledge/repository', {
+export async function deleteRepository(prefix) {
+  return await apiRequest('/api/knowledge/reset', {
     method: 'DELETE',
-    body: JSON.stringify({ repo_prefix: repoPrefix }),
+    body: JSON.stringify({ prefix }),
   });
 }
 
