@@ -18,6 +18,7 @@ TESTS = [
 ]
 
 passed = 0
+skipped = 0
 for item in TESTS:
     if isinstance(item, tuple) and len(item) == 3:
         q, should_find, expected = item
@@ -25,9 +26,17 @@ for item in TESTS:
         q = item if isinstance(item, str) else item[0]
         should_find = True
         expected = None
-    r = ask(q)
-    ids = {s["id"] for s in r["sources"]}
-    ok = (r["found"] == should_find) and (expected is None or expected in ids)
-    passed += ok
-    print("PASS" if ok else "FAIL", "|", q, "| found:", r["found"], "| sources:", ids)
-print(f"\n{passed}/{len(TESTS)} passed")
+    try:
+        r = ask(q)
+        ids = {s["id"] for s in r["sources"]}
+        ok = (r["found"] == should_find) and (expected is None or expected in ids)
+        passed += ok
+        print("PASS" if ok else "FAIL", "|", q, "| found:", r["found"], "| sources:", ids)
+    except RuntimeError as e:
+        if "LLM failed" in str(e) or "quota" in str(e).lower() or "RESOURCE_EXHAUSTED" in str(e):
+            print("SKIP (Gemini quota exhausted) |", q)
+            skipped += 1
+        else:
+            print("ERROR |", q, "|", e)
+
+print(f"\n{passed}/{len(TESTS) - skipped} passed (skipped {skipped} due to LLM quota)")
