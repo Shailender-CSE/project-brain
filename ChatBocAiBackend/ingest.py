@@ -118,7 +118,9 @@ def upsert_chunks(chunks: list[dict], progress_callback=None) -> int:
                 author_str = c.get("author") or "Unknown"
                 date_str = str(c.get("date") or datetime.date.today())
                 type_str = c.get("type") or "document"
-                embed_text = f"[{type_str}] {c['text']} (Author: {author_str}, Date: {date_str})"
+                files_list = c.get("files") or []
+                files_str = f", Files: {', '.join(files_list)}" if files_list else ""
+                embed_text = f"[{type_str}] {c['text']} (Author: {author_str}, Date: {date_str}{files_str})"
 
                 # Vector embedding: normalize_embeddings=True, WITHOUT BGE query prefix
                 embedding = model.encode(embed_text, normalize_embeddings=True).tolist()
