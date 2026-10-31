@@ -6,21 +6,30 @@ const API_BASE = (
 ).replace(/\/$/, '');
 
 export async function apiRequest(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+
+  // Only set application/json if not sending FormData
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers,
   });
+
   if (!res.ok) {
     const text = await res.text();
     let message = text;
     try {
       const body = JSON.parse(text);
-      message = body.detail || text;
+      message = body.detail || body.message || text;
     } catch {
-      // Keep the response text when it is not JSON.
+      // Keep response text if not JSON
     }
     throw new Error(message || `Request failed: ${res.status}`);
   }
+
   return res.json();
 }
 
