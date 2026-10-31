@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import threading
 import uuid
+from typing import Optional
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,8 @@ from knowledge_ingest import (
     delete_chunks_by_prefix,
     DB_URI,
 )
+
+from impact_service import compute_impact, match_chat_impact_intent
 
 # In-memory background task registry (Single-worker uvicorn required for consistent state)
 task_registry: dict[str, dict] = {}
@@ -71,6 +74,11 @@ class DeletePrefixRequest(BaseModel):
     prefix: str
 
 
+class ImpactRequest(BaseModel):
+    input: str
+    repo: Optional[str] = None
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -82,6 +90,33 @@ def ask_endpoint(body: Question):
     q = body.question.strip()
     if not q:
         return {"found": False, "answer": "Please enter a question.", "sources": [], "confidence": "none"}
+
+    # Fail-safe Chat Routing: check for impact / blast radius intent
+    try:
+        impact_target = match_chat_impact_intent(q)
+        if impact_target:
+            impact_res = compute_impact(impact_target)
+            if impact_res.get("found"):
+                # Format answer maintaining the exact {found, answer, sources, confidence} shape
+                affected_lines = []
+                for a in impact_res.get("affected", [])[:8]:
+                    affected_lines.append(f"- [{a['kind']}] {a['item']} ({a['confidence']} confidence): {a['reason']}")
+
+                answer_text = (
+                    f"{impact_res.get('summary', '')}\n\n"
+                    f"**Potential Blast Radius & Affected Items:**\n"
+                    + "\n".join(affected_lines)
+                )
+                return {
+                    "found": True,
+                    "answer": answer_text,
+                    "sources": impact_res.get("sources", []),
+                    "confidence": "high" if any(a["confidence"] == "high" for a in impact_res.get("affected", [])) else "medium",
+                }
+    except Exception as route_err:
+        print(f"[Chat Routing notice] Falling back to standard ask(): {route_err}")
+
+    # Standard ask pipeline
     try:
         return ask(q)
     except Exception as e:
@@ -92,6 +127,18 @@ def ask_endpoint(body: Question):
             "sources": [],
             "confidence": "none",
         }
+
+
+@app.post("/assistant/impact")
+def impact_endpoint(body: ImpactRequest):
+    target = body.input.strip()
+    if not target:
+        return {"found": False, "answer": "No project history found for this change."}
+    try:
+        return compute_impact(target, repo=body.repo)
+    except Exception as e:
+        print(f"Error computing impact: {e}")
+        return {"found": False, "answer": "No project history found for this change."}
 
 
 def _run_document_indexing(task_id: str, filename: str, file_bytes: bytes):
