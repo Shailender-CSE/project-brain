@@ -387,3 +387,41 @@
   border: 1px solid var(--border);
   margin-bottom: 12px;
 }
+
+/* ── Status banners (replacing demo-note) ─────────────────────────────────── */
+.status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.status-success {
+  background: rgba(21, 157, 145, 0.12);
+  border: 1px solid rgba(21, 157, 145, 0.3);
+  color: #75C6B0;
+}
+.status-partial {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #fcd34d;
+}
+.status-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+.banner-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.banner-dismiss:hover { opacity: 1; }

@@ -8,40 +8,49 @@ export async function getTaskStatus(taskId) {
   return await apiRequest(`/api/knowledge/status/${taskId}`);
 }
 
-export async function pollTaskUntilDone(taskId, onProgress, intervalMs = 1000) {
+/**
+ * Start a document upload and return {task_id} immediately.
+ * The caller is responsible for polling via getTaskStatus.
+ * FormData is passed directly — api.js skips Content-Type for FormData.
+ */
+export async function startDocumentUpload(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return await apiRequest('/api/knowledge/upload', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/**
+ * Start a repository ingestion and return {task_id} immediately.
+ */
+export async function startRepositoryConnect(repoUrl) {
+  return await apiRequest('/api/knowledge/repository', {
+    method: 'POST',
+    body: JSON.stringify({ repo_url: repoUrl }),
+  });
+}
+
+/** Legacy blocking version — kept for any remaining callers. */
+export async function pollTaskUntilDone(taskId, onProgress, intervalMs = 2000) {
   while (true) {
     const status = await getTaskStatus(taskId);
-    if (onProgress && status.progress) {
-      onProgress(status.progress);
-    }
-    if (status.status === 'completed' || status.status === 'completed (partial)') {
-      return status;
-    }
-    if (status.status === 'failed') {
-      throw new Error(status.error || 'Indexing task failed');
-    }
+    if (onProgress && status.progress) onProgress(status.progress);
+    if (status.status === 'completed' || status.status === 'completed (partial)') return status;
+    if (status.status === 'failed') throw new Error(status.error || 'Indexing task failed');
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }
 
+/** Legacy wrappers — kept so existing import paths don't break. */
 export async function uploadDocument(file, onProgress) {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const response = await apiRequest('/api/knowledge/upload', {
-    method: 'POST',
-    body: formData,
-  });
-
+  const response = await startDocumentUpload(file);
   return await pollTaskUntilDone(response.task_id, onProgress);
 }
 
 export async function connectRepository(repoUrl, onProgress) {
-  const response = await apiRequest('/api/knowledge/repository', {
-    method: 'POST',
-    body: JSON.stringify({ repo_url: repoUrl }),
-  });
-
+  const response = await startRepositoryConnect(repoUrl);
   return await pollTaskUntilDone(response.task_id, onProgress);
 }
 
@@ -55,6 +64,8 @@ export async function deleteRepository(prefix) {
 export default {
   getKnowledgeSources,
   getTaskStatus,
+  startDocumentUpload,
+  startRepositoryConnect,
   pollTaskUntilDone,
   uploadDocument,
   connectRepository,
