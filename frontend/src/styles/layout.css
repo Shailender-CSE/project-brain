@@ -1,0 +1,2 @@
+.app-shell { display: flex; min-height: 100vh; }
+.main-area { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-height: 100vh; }

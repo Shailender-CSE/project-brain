@@ -1,0 +1,13 @@
+:root {
+  --sidebar: #102D3B;
+  --bg: #1D3546;
+  --card: #42616A;
+  --primary: #159D91;
+  --secondary: #75C6B0;
+  --text: #E5F0EC;
+  --muted: #A9C3BC;
+  --border: rgba(117, 198, 176, 0.18);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  --radius: 12px;
+  --radius-sm: 8px;
+}

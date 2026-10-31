@@ -1,0 +1,106 @@
+.projects-page {
+  background: #0B141E;
+  min-height: 100%;
+  padding: 0;
+  color: var(--text);
+}
+.projects-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.projects-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--secondary);
+  margin-bottom: 6px;
+}
+.projects-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: #EAF4F0;
+}
+.projects-subtitle {
+  font-size: 12px;
+  color: #8FA9A3;
+  margin: 0;
+}
+.create-project-btn {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.projects-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.projects-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 200px;
+  height: 27px;
+  padding: 0 8px;
+  background: rgba(29,53,70,0.6);
+  border: 1px solid rgba(117,198,176,0.2);
+  border-radius: 6px;
+  color: var(--muted);
+}
+.projects-search input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 12px;
+}
+.projects-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.view-toggle {
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(117,198,176,0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(29,53,70,0.6);
+}
+.view-toggle button {
+  width: 26px;
+  height: 27px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.view-toggle button.active {
+  background: rgba(21,157,145,0.18);
+  color: var(--text);
+}
+.sync-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 27px;
+  padding: 0 10px;
+  background: rgba(29,53,70,0.6);
+  border: 1px solid rgba(117,198,176,0.2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sync-all-btn:hover { border-color: var(--primary); }

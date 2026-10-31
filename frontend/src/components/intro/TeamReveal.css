@@ -1,0 +1,63 @@
+.team-reveal-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.team-cutouts {
+  position: relative;
+  width: 90vw;
+  max-width: 1100px;
+  height: 60vh;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+}
+
+.cutout {
+  height: 55vh;
+  width: auto;
+  object-fit: contain;
+  position: absolute;
+  bottom: 0;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
+}
+
+.cutout-center {
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.cutout-extreme-left {
+  left: 2%;
+  z-index: 2;
+}
+
+.cutout-inner-left {
+  left: 26%;
+  z-index: 3;
+}
+
+.cutout-inner-right {
+  right: 26%;
+  z-index: 3;
+}
+
+.cutout-extreme-right {
+  right: 2%;
+  z-index: 2;
+}
+
+.team-full-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 10;
+}

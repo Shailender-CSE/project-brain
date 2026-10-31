@@ -1,0 +1,116 @@
+.project-card {
+  background: rgba(45, 68, 78, 0.95);
+  border: 1px solid rgba(117, 198, 176, 0.18);
+  border-radius: 9px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 318px;
+  height: 204px;
+  transition: border-color .15s ease;
+}
+.project-card:hover { border-color: rgba(117,198,176,0.35); }
+.project-card-list {
+  width: 100%;
+  height: auto;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(29,53,70,0.6);
+  display: grid;
+  place-items: center;
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #EAF4F0;
+  margin: 0;
+}
+.card-desc {
+  font-size: 11px;
+  color: #8FA9A3;
+  margin: 0;
+  line-height: 1.4;
+  min-height: 28px;
+}
+.card-divider {
+  height: 1px;
+  background: rgba(117,198,176,0.12);
+}
+.card-meta {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: #8FA9A3;
+}
+.card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.memory-health-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #8FA9A3;
+  margin-bottom: 4px;
+}
+.memory-health-value {
+  color: var(--secondary);
+  font-weight: 600;
+}
+.memory-health-track {
+  height: 4px;
+  background: rgba(29,53,70,0.6);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.memory-health-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+.card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+.memory-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  background: rgba(21,157,145,0.18);
+  border: 1px solid rgba(21,157,145,0.35);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.memory-btn:hover { background: rgba(21,157,145,0.28); }
+.ask-brain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ask-brain-btn:hover { color: var(--text); }
