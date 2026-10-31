@@ -29,6 +29,7 @@ from knowledge_ingest import (
 )
 
 from impact_service import compute_impact, match_chat_impact_intent
+from knowledge_risk import compute_knowledge_risk, compute_repo_stats
 
 # In-memory background task registry (Single-worker uvicorn required for consistent state)
 task_registry: dict[str, dict] = {}
@@ -384,3 +385,36 @@ def get_sources_endpoint():
         "total_documents": len(docs),
         "total_repositories": len(repos),
     }
+
+
+
+# ── Stage 3: Knowledge-at-risk endpoints ────────────────────────────────────
+
+@app.get("/assistant/knowledge-risk")
+async def knowledge_risk(repo: Optional[str] = None, limit: int = 20):
+    """
+    Return files exclusively authored by one person within the ingested window.
+    Query params:
+      repo  – optional owner/repo (e.g. 'octocat/Hello-World' or full GitHub URL)
+      limit – max files returned (default 20)
+    """
+    try:
+        result = compute_knowledge_risk(repo=repo, limit=max(1, min(limit, 200)))
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/assistant/repo-stats")
+async def repo_stats(repo: Optional[str] = None):
+    """
+    Return aggregate counts (commits, issues, PRs, docs), date range,
+    distinct non-bot authors and top-5 authors by commit count.
+    Query params:
+      repo – optional owner/repo
+    """
+    try:
+        result = compute_repo_stats(repo=repo)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
