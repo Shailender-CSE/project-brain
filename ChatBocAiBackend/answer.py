@@ -28,18 +28,22 @@ NOT_FOUND = "I couldn't find this in the project history."
 
 # ---- LLM call: swap this one function if you change provider ----
 
+MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"]
+
 def llm(prompt: str) -> str:
     client = get_client()
-    for attempt in range(2):
-        try:
-            print("gemini calling...")
-            resp = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
-            print("gemini returned")
-            return resp.text
-        except Exception as e:
-            print("LLM error:", e)
-            time.sleep(2)
-    raise RuntimeError("LLM failed twice")
+    for model_name in MODELS:
+        for attempt in range(2):
+            try:
+                print(f"gemini calling {model_name}...")
+                resp = client.models.generate_content(model=model_name, contents=prompt)
+                print(f"gemini {model_name} returned")
+                if resp and resp.text:
+                    return resp.text
+            except Exception as e:
+                print(f"LLM error with {model_name} (attempt {attempt+1}): {e}")
+                time.sleep(1)
+    raise RuntimeError("LLM failed with all fallback models")
 
 # ------------------------------------------------------------------
 

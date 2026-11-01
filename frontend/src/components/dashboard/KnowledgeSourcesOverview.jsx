@@ -1,12 +1,23 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
-import { Github, FileText, ArrowRight } from 'lucide-react';
-import { knowledgeSources } from '../../data/mockDashboard';
+import { Github, FileText, ArrowRight, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import apiRequest from '../../services/api.js';
 
 export default function KnowledgeSourcesOverview() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
+  const [sources, setSources] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiRequest('/api/dashboard')
+      .then((data) => setSources(data.knowledge_sources || []))
+      .catch(() => setSources([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <motion.section
       className="knowledge-sources"
@@ -25,7 +36,17 @@ export default function KnowledgeSourcesOverview() {
       </div>
 
       <div className="source-list">
-        {knowledgeSources.map((s, idx) => {
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px', color: '#8FA9A3', fontSize: '13px' }}>
+            <Loader2 size={14} className="spin" /> Loading…
+          </div>
+        )}
+        {!loading && sources.length === 0 && (
+          <div style={{ padding: '16px', color: '#8FA9A3', fontSize: '13px', textAlign: 'center' }}>
+            No knowledge sources yet. Add repositories or documents in Knowledge Sources.
+          </div>
+        )}
+        {sources.map((s, idx) => {
           const Icon = s.type === 'github' ? Github : FileText;
           return (
             <motion.div

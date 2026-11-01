@@ -8,6 +8,8 @@ import ProjectGrid from '../components/projects/ProjectGrid';
 import CreateProjectModal from '../components/projects/CreateProjectModal';
 import RemoveProjectModal from '../components/projects/RemoveProjectModal';
 import ProjectDetailsModal from '../components/projects/ProjectDetailsModal';
+import { syncProject } from '../services/projectService.js';
+import { getTaskStatus } from '../services/knowledgeService.js';
 import './Projects.css';
 
 export default function Projects() {
@@ -30,7 +32,7 @@ export default function Projects() {
 
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(null), 3000);
+      const t = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(t);
     }
   }, [toast]);
@@ -41,32 +43,77 @@ export default function Projects() {
     return projects.filter((p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q));
   }, [projects, search]);
 
-  const handleImport = async (data) => {
-    await createProject(data);
-    showToast('Project imported successfully', 'success');
-  };
-
   const handleSync = async (project) => {
     if (syncingIds.has(project.id) || project.status === 'processing') return;
+
+    // Check if we have a real repo to sync
+    const repoUrl = project.repoUrl || project.name;
+    const looksLikeRepo = repoUrl && (repoUrl.includes('/') || repoUrl.includes('github.com'));
+
+    if (!looksLikeRepo) {
+      showToast('No repository URL set. Go to Knowledge Sources to add one.', 'error');
+      return;
+    }
+
     setSyncingIds((prev) => new Set(prev).add(project.id));
-    setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, status: 'processing', indexingProgress: Math.max(p.indexingProgress || 0, 10), lastSynced: 'Syncing now (demo)' } : p));
+    setProjects((prev) => prev.map((p) =>
+      p.id === project.id ? { ...p, status: 'processing', indexingProgress: 5, lastSynced: 'Syncing…' } : p
+    ));
+
     try {
-      for (let i = 20; i <= 100; i += 20) {
-        await new Promise((r) => setTimeout(r, 300));
-        setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, indexingProgress: i } : p));
+      const { task_id } = await syncProject(project);
+
+      // Poll task status until done
+      let done = false;
+      let progress = 10;
+      while (!done) {
+        await new Promise((r) => setTimeout(r, 2000));
+        progress = Math.min(progress + 15, 90);
+        setProjects((prev) => prev.map((p) =>
+          p.id === project.id ? { ...p, indexingProgress: progress } : p
+        ));
+        try {
+          const status = await getTaskStatus(task_id);
+          if (status.status === 'completed' || status.status === 'completed (partial)') {
+            done = true;
+            const chunks = status.chunks_ingested || 0;
+            setProjects((prev) => prev.map((p) =>
+              p.id === project.id ? {
+                ...p, status: 'synced', indexingProgress: 100,
+                lastSynced: 'Just now', commits: (p.commits || 0) + chunks,
+              } : p
+            ));
+            showToast(`Sync complete: ${chunks} items indexed from ${repoUrl}`, 'success');
+          } else if (status.status === 'failed') {
+            done = true;
+            throw new Error(status.error || 'Indexing failed');
+          }
+        } catch (pollErr) {
+          if (pollErr.message?.includes('Indexing')) throw pollErr;
+          // Network hiccup — keep polling
+        }
       }
-      setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, status: 'synced', indexingProgress: 100, lastSynced: 'Just now (demo)' } : p));
-      showToast('Demo sync completed (simulated)', 'success');
     } catch (e) {
-      showToast('Demo sync failed (simulated)', 'error');
+      setProjects((prev) => prev.map((p) =>
+        p.id === project.id ? { ...p, status: 'attention', indexingProgress: 0 } : p
+      ));
+      showToast(e.message || 'Sync failed. Check backend logs.', 'error');
     } finally {
       setSyncingIds((prev) => { const n = new Set(prev); n.delete(project.id); return n; });
     }
   };
 
+  const handleImport = async (data) => {
+    const created = await createProject(data);
+    showToast('Project created successfully', 'success');
+    if (data.repoUrl) {
+      handleSync(created);
+    }
+  };
+
   const handleSyncAll = async () => {
     for (const p of projects) {
-      await handleSync(p);
+      if (!syncingIds.has(p.id)) await handleSync(p);
     }
   };
 
@@ -115,6 +162,7 @@ export default function Projects() {
           <button className="sync-all-btn" onClick={handleSyncAll}><RefreshCw size={13} /> Sync all</button>
         </div>
       </div>
+
       {loading && (
         <div className="project-grid">
           {Array.from({ length: 3 }).map((_, i) => <div key={i} className="skeleton" />)}
@@ -136,7 +184,7 @@ export default function Projects() {
         <div className="empty-state">
           <FolderKanban size={40} />
           <h3>{projects.length === 0 ? 'No projects yet' : 'No matching projects'}</h3>
-          <p>{projects.length === 0 ? 'Import an existing project to get started.' : 'Try adjusting your search.'}</p>
+          <p>{projects.length === 0 ? 'Create a project to get started.' : 'Try adjusting your search.'}</p>
           {projects.length === 0 && (
             <button className="btn btn-primary" onClick={() => setImportOpen(true)} style={{ marginTop: 12 }}>
               <Plus size={16} /> Create project

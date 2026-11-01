@@ -4,6 +4,7 @@ import Modal from '../common/Modal';
 
 export default function CreateProjectModal({ isOpen, onClose, onSubmit, existingNames = [] }) {
   const [name, setName] = useState('');
+  const [repoUrl, setRepoUrl] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -11,6 +12,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSubmit, existing
   useEffect(() => {
     if (isOpen) {
       setName('');
+      setRepoUrl('');
       setDescription('');
       setError('');
       setSubmitting(false);
@@ -33,7 +35,11 @@ export default function CreateProjectModal({ isOpen, onClose, onSubmit, existing
     setSubmitting(true);
     setError('');
     try {
-      await onSubmit({ name: name.trim(), description: description.trim() });
+      await onSubmit({
+        name: name.trim(),
+        repoUrl: repoUrl.trim(),
+        description: description.trim(),
+      });
       onClose();
     } catch (err) {
       setError(err.message || 'Something went wrong.');
@@ -43,7 +49,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSubmit, existing
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Import Existing Project" subtitle="Bring your team's existing project knowledge into Brain AI.">
+    <Modal isOpen={isOpen} onClose={onClose} title="Connect & Create Project" subtitle="Link a GitHub repository to index code, commits, and PRs into Brain AI.">
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label">Project Name *</label>
@@ -51,10 +57,22 @@ export default function CreateProjectModal({ isOpen, onClose, onSubmit, existing
             className="form-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Banking Application"
+            placeholder="e.g. React or Hello World"
             autoFocus
           />
           {error && <div className="form-error">{error}</div>}
+        </div>
+        <div className="form-group">
+          <label className="form-label">GitHub Repository URL (Optional)</label>
+          <input
+            className="form-input"
+            value={repoUrl}
+            onChange={(e) => setRepoUrl(e.target.value)}
+            placeholder="e.g. octocat/Hello-World or https://github.com/facebook/react"
+          />
+          <span style={{ fontSize: '11px', color: '#8FA9A3', marginTop: '4px', display: 'block' }}>
+            Enter a public GitHub repository to automatically index commits, issues, and PRs.
+          </span>
         </div>
         <div className="form-group">
           <label className="form-label">Project Description</label>
@@ -68,7 +86,7 @@ export default function CreateProjectModal({ isOpen, onClose, onSubmit, existing
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? 'Importing...' : 'Import Project'}
+            {submitting ? 'Connecting...' : 'Connect Project'}
           </button>
         </div>
       </form>

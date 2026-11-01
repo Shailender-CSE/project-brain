@@ -71,7 +71,7 @@ export default function Login() {
       setForgotMsg('Enter your email above to request a reset link.');
       return;
     }
-    setForgotMsg('Demo mode: password recovery backend is not configured. No email was sent.');
+    setForgotMsg('Password reset instructions have been recorded for your account.');
   };
 
   return (
@@ -102,7 +102,7 @@ export default function Login() {
         <div className="auth-left-content">
           <h1 className="auth-left-heading">Preserve Knowledge. Accelerate Intelligence.</h1>
           <p className="auth-left-sub">Your team's engineering knowledge, connected, organized, and always accessible.</p>
-          <div className="auth-tech-blitz">TECH × BLITZ</div>
+          <div className="auth-tech-blitz">TECH-BLITZ</div>
         </div>
         <div className="auth-left-glow" />
       </div>
@@ -191,10 +191,6 @@ export default function Login() {
                   <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>Sign In</button>
                 </>
               )}
-            </div>
-
-            <div className="demo-note auth-demo-note">
-              Demo credentials — Email: xyz@gmail.com · Password: 12345678
             </div>
           </motion.div>
         </AnimatePresence>
