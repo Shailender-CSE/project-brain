@@ -502,9 +502,14 @@ COMPUTED IMPACT EVIDENCE:
 Write ONLY a concise, factual 2-3 sentence summary paragraph explaining the blast radius of this change.
 Do NOT invent or add any new files or features beyond the evidence provided above."""
 
-        resp = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
-        text = resp.text.strip() if resp and resp.text else fallback_summary
-        return text
+        for model_name in ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+            try:
+                resp = client.models.generate_content(model=model_name, contents=prompt)
+                if resp and resp.text:
+                    return resp.text.strip()
+            except Exception as e:
+                print(f"[Impact Summary LLM notice] Model {model_name} error: {e}")
+        return fallback_summary
     except Exception as e:
         print(f"[Impact Summary LLM notice] Fallback summary used: {e}")
         return fallback_summary

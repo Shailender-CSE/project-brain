@@ -85,6 +85,199 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/dashboard")
+def dashboard_stats():
+    """
+    Return real dashboard stats: total repos, documents, commits, coverage score,
+    recent commits, recent activity (recent indexed items), and knowledge sources.
+    """
+    import datetime
+    docs = {}
+    repos = {}
+    recent_commits = []
+    
+    try:
+        with psycopg.connect(DB_URI) as conn:
+            with conn.cursor() as cur:
+                # Get all chunks for stats
+                cur.execute("""
+                    SELECT id, type, source_url, author, date, text, files
+                    FROM chunks
+                    ORDER BY date DESC
+                    LIMIT 500;
+                """)
+                rows = cur.fetchall()
+                
+                for r in rows:
+                    cid, ctype, source_url, author, date_val, text, files = r
+                    date_str = str(date_val) if date_val else ""
+                    
+                    if cid.startswith("upload:"):
+                        doc_key = cid.split("#")[0].replace("upload:", "")
+                        if doc_key not in docs:
+                            docs[doc_key] = {"name": doc_key, "chunks": 0}
+                        docs[doc_key]["chunks"] += 1
+                    elif cid.startswith("gh:"):
+                        parts = cid.split(":")
+                        if len(parts) >= 4:
+                            owner, repo_name = parts[1], parts[2]
+                            repo_key = f"{owner}/{repo_name}"
+                            item_type = parts[3]
+                        else:
+                            repo_key = "Imported Repository"
+                            item_type = ctype
+                        
+                        if repo_key not in repos:
+                            repos[repo_key] = {"name": repo_key, "commits": 0, "prs": 0, "issues": 0, "docs": 0}
+                        
+                        if item_type == "commit":
+                            repos[repo_key]["commits"] += 1
+                            # Collect recent commits
+                            if len(recent_commits) < 10:
+                                # Parse commit message from text
+                                msg = text[:120] if text else "Commit"
+                                sha = parts[4] if len(parts) > 4 else cid[-7:]
+                                recent_commits.append({
+                                    "id": cid,
+                                    "message": msg,
+                                    "repo": repo_key,
+                                    "author": author or "Unknown",
+                                    "hash": sha[:7] if sha else "?",
+                                    "date": date_str,
+                                    "branch": "main",
+                                    "url": source_url or ""
+                                })
+                        elif item_type == "pr":
+                            repos[repo_key]["prs"] += 1
+                        elif item_type == "issue":
+                            repos[repo_key]["issues"] += 1
+                        elif item_type == "doc":
+                            repos[repo_key]["docs"] += 1
+
+    except Exception as e:
+        print("Error fetching dashboard stats:", e)
+    
+    total_commits = sum(r["commits"] for r in repos.values())
+    total_docs = len(docs)
+    total_repos = len(repos)
+    coverage = min(100, max(0, 30 + total_docs * 8 + total_repos * 10 + min(total_commits // 10, 30)))
+    
+    # Build recent activity from repos and docs
+    recent_activity = []
+    for repo_name, repo_data in list(repos.items())[:3]:
+        recent_activity.append({
+            "id": f"repo-{repo_name}",
+            "type": "repo",
+            "title": "Repository indexed",
+            "description": f"Indexed {repo_data['commits']} commits, {repo_data['prs']} PRs, {repo_data['issues']} issues",
+            "target": repo_name,
+            "time": "Recently",
+            "status": "success"
+        })
+    for doc_name, doc_data in list(docs.items())[:3]:
+        recent_activity.append({
+            "id": f"doc-{doc_name}",
+            "type": "document",
+            "title": "Document indexed",
+            "description": f"Indexed {doc_data['chunks']} chunk(s) from {doc_name}",
+            "target": doc_name,
+            "time": "Recently",
+            "status": "success"
+        })
+
+    # Knowledge sources for dashboard
+    knowledge_sources = []
+    if repos:
+        knowledge_sources.append({
+            "id": "github-repos",
+            "name": "GitHub Repositories",
+            "type": "github",
+            "items": total_commits,
+            "status": "Synced"
+        })
+    if docs:
+        knowledge_sources.append({
+            "id": "uploaded-docs",
+            "name": "Uploaded Documents",
+            "type": "document",
+            "items": sum(d["chunks"] for d in docs.values()),
+            "status": "Synced"
+        })
+
+    return {
+        "stats": {
+            "repositories": total_repos,
+            "documents": total_docs,
+            "commits": total_commits,
+            "coverage": coverage,
+        },
+        "recent_commits": recent_commits[:5],
+        "recent_activity": recent_activity[:5],
+        "knowledge_sources": knowledge_sources,
+    }
+
+
+@app.get("/api/commits")
+def get_commits(repo: Optional[str] = None, limit: int = 50):
+    """Return real commits from the vector database."""
+    commits = []
+    try:
+        with psycopg.connect(DB_URI) as conn:
+            with conn.cursor() as cur:
+                if repo:
+                    # Normalize repo input
+                    if "github.com/" in repo:
+                        repo = repo.split("github.com/")[-1].rstrip("/")
+                    parts = repo.split("/")
+                    if len(parts) == 2:
+                        prefix = f"gh:{parts[0]}:{parts[1]}:commit:"
+                    else:
+                        prefix = f"gh:{repo}:commit:"
+                    cur.execute(
+                        """
+                        SELECT id, text, source_url, author, date, files
+                        FROM chunks
+                        WHERE type = 'commit' AND starts_with(id, %s)
+                        ORDER BY date DESC
+                        LIMIT %s;
+                        """,
+                        (prefix, limit),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT id, text, source_url, author, date, files
+                        FROM chunks
+                        WHERE type = 'commit'
+                        ORDER BY date DESC
+                        LIMIT %s;
+                        """,
+                        (limit,),
+                    )
+                rows = cur.fetchall()
+                for r in rows:
+                    cid, text, source_url, author, date_val, files = r
+                    parts = cid.split(":")
+                    repo_name = f"{parts[1]}/{parts[2]}" if len(parts) >= 3 else "Unknown"
+                    sha = parts[4] if len(parts) > 4 else cid[-7:]
+                    # Extract commit message from text (first line or first 120 chars)
+                    msg = (text or "").split("\n")[0][:120] or "Commit"
+                    commits.append({
+                        "id": cid,
+                        "message": msg,
+                        "repo": repo_name,
+                        "author": author or "Unknown",
+                        "hash": sha[:7] if sha else "?",
+                        "date": str(date_val) if date_val else "",
+                        "branch": "main",
+                        "url": source_url or "",
+                        "files": files or [],
+                    })
+    except Exception as e:
+        print("Error fetching commits:", e)
+    return {"commits": commits, "total": len(commits)}
+
+
 @app.post("/assistant/ask")
 @app.post("/ask")
 def ask_endpoint(body: Question):

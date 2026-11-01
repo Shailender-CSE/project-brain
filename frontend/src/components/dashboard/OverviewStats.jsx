@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Github, FileText, GitCommit, PieChart } from 'lucide-react';
 import { useReducedMotion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { dashboardStats } from '../../data/mockDashboard';
+import apiRequest from '../../services/api.js';
 
 function CountUp({ value, suffix = '', reduce }) {
   const [display, setDisplay] = useState(reduce ? value : 0);
@@ -24,11 +24,19 @@ function CountUp({ value, suffix = '', reduce }) {
 
 export default function OverviewStats() {
   const reduce = useReducedMotion();
+  const [stats, setStats] = useState({ repositories: 0, documents: 0, commits: 0, coverage: 0 });
+
+  useEffect(() => {
+    apiRequest('/api/dashboard')
+      .then((data) => { if (data?.stats) setStats(data.stats); })
+      .catch(() => {}); // non-fatal: show zeros if backend unreachable
+  }, []);
+
   const cards = [
-    { label: 'Connected Repositories', value: dashboardStats.repositories, icon: Github, trend: '+2 this month', color: 'primary' },
-    { label: 'Indexed Documents', value: dashboardStats.documents, icon: FileText, trend: 'Fully indexed', color: 'secondary' },
-    { label: 'Commits Analyzed', value: dashboardStats.commits, icon: GitCommit, trend: '+184 this week', color: 'primary' },
-    { label: 'Knowledge Coverage', value: dashboardStats.coverage, icon: PieChart, trend: 'On track', color: 'secondary', suffix: '%' },
+    { label: 'Connected Repositories', value: stats.repositories, icon: Github, trend: 'From vector DB', color: 'primary' },
+    { label: 'Indexed Documents', value: stats.documents, icon: FileText, trend: 'Fully indexed', color: 'secondary' },
+    { label: 'Commits Analyzed', value: stats.commits, icon: GitCommit, trend: 'Live data', color: 'primary' },
+    { label: 'Knowledge Coverage', value: stats.coverage, icon: PieChart, trend: 'Calculated', color: 'secondary', suffix: '%' },
   ];
 
   return (

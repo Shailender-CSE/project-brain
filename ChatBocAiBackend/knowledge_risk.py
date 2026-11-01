@@ -189,9 +189,14 @@ def _generate_risk_summary(
             f'Write ONLY a concise 2-3 sentence summary of the knowledge concentration risk '
             f'shown above. Do NOT invent any files or authors beyond those listed.'
         )
-        resp = client.models.generate_content(model="gemini-3.8-flash", contents=prompt)
-        text = resp.text.strip() if resp and resp.text else fallback
-        return text
+        for model_name in ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+            try:
+                resp = client.models.generate_content(model=model_name, contents=prompt)
+                if resp and resp.text:
+                    return resp.text.strip()
+            except Exception as e:
+                print(f"[KnowledgeRisk LLM notice] Model {model_name} error: {e}")
+        return fallback
     except Exception as exc:
         print(f"[KnowledgeRisk LLM notice] Fallback used: {exc}")
         return fallback

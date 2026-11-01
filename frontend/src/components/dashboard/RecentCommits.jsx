@@ -1,12 +1,23 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
-import { GitCommit, ArrowRight } from 'lucide-react';
-import { recentCommits } from '../../data/mockDashboard';
+import { GitCommit, ArrowRight, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import apiRequest from '../../services/api.js';
 
 export default function RecentCommits() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
+  const [commits, setCommits] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiRequest('/api/commits?limit=5')
+      .then((data) => setCommits(data.commits || []))
+      .catch(() => setCommits([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <motion.section
       className="recent-commits"
@@ -25,7 +36,17 @@ export default function RecentCommits() {
       </div>
 
       <div className="commit-list">
-        {recentCommits.map((c, idx) => (
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px', color: '#8FA9A3', fontSize: '13px' }}>
+            <Loader2 size={14} className="spin" /> Loading commits…
+          </div>
+        )}
+        {!loading && commits.length === 0 && (
+          <div style={{ padding: '16px', color: '#8FA9A3', fontSize: '13px', textAlign: 'center' }}>
+            No commits indexed yet. Connect a repository in Knowledge Sources.
+          </div>
+        )}
+        {commits.map((c, idx) => (
           <motion.div
             key={c.id}
             className="commit-row"

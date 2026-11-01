@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { useReducedMotion } from 'framer-motion';
-import { GitBranch, GitCommit, FileText, RefreshCw, Sparkles, CheckCircle2 } from 'lucide-react';
-import { recentActivities } from '../../data/mockDashboard';
+import { GitBranch, GitCommit, FileText, RefreshCw, Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import apiRequest from '../../services/api.js';
 
 const ICONS = {
   repo: GitBranch,
@@ -18,6 +19,16 @@ const STATUS_COLORS = {
 
 export default function RecentActivity() {
   const reduce = useReducedMotion();
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiRequest('/api/dashboard')
+      .then((data) => setActivities(data.recent_activity || []))
+      .catch(() => setActivities([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <motion.section
       className="recent-activity"
@@ -33,7 +44,17 @@ export default function RecentActivity() {
       </div>
 
       <div className="timeline">
-        {recentActivities.map((a, idx) => {
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px', color: '#8FA9A3', fontSize: '13px' }}>
+            <Loader2 size={14} className="spin" /> Loading…
+          </div>
+        )}
+        {!loading && activities.length === 0 && (
+          <div style={{ padding: '16px', color: '#8FA9A3', fontSize: '13px', textAlign: 'center' }}>
+            No activity yet. Index a repository or upload a document to get started.
+          </div>
+        )}
+        {activities.map((a, idx) => {
           const Icon = ICONS[a.type] || CheckCircle2;
           return (
             <motion.div
